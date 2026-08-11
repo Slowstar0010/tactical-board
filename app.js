@@ -176,13 +176,11 @@ function arrowEnd(o) {
   return { x: o.x + o.length * Math.cos(r), y: o.y + o.length * Math.sin(r) };
 }
 
-// 가시성을 대폭 향상시킨 볼드한 화살표 렌더링 함수
 function drawArrowShape(container, startPt, endPt, angle, color) {
-  const headLen = 40;   // 화살표 머리 길이 (대폭 확대)
-  const headWidth = 32; // 화살표 머리 너비 (2배 이상 확대)
+  const headLen = 40;
+  const headWidth = 32;
 
   const rad = angle * Math.PI / 180;
-  // 선이 화살표 머리 중앙 안쪽까지 자연스럽게 연결되도록 처리
   const lineEndX = endPt.x - (headLen * 0.5) * Math.cos(rad);
   const lineEndY = endPt.y - (headLen * 0.5) * Math.sin(rad);
 
@@ -197,7 +195,6 @@ function drawArrowShape(container, startPt, endPt, angle, color) {
   });
   container.appendChild(line);
 
-  // 대형 삼각 화살표 머리
   const headGroup = svgEl("g", { transform: `translate(${endPt.x} ${endPt.y}) rotate(${angle})` });
   headGroup.appendChild(svgEl("polygon", {
     points: `0,0 ${-headLen},${-headWidth / 2} ${-headLen * 0.75},0 ${-headLen},${headWidth / 2}`,
@@ -399,15 +396,19 @@ function updateInteraction(p) {
     const org = interaction.original; interaction.changed = true;
     const dx = p.x - interaction.start.x, dy = p.y - interaction.start.y, h = interaction.handle;
 
-    if (o.type === "direction") {
-      const lengthChange = h.includes("e") ? dx : -dx;
-      const widthChange = h.includes("s") ? dy : -dy;
+    if (o.type === "direction" || o.type === "arrow") {
+      // 회전된 각도(angle)를 고려하여 글로벌 드래그(dx, dy)를 객체 기준 로컬 드래그(lx, ly)로 변환
+      const rad = -(org.angle || 0) * Math.PI / 180;
+      const lx = dx * Math.cos(rad) - dy * Math.sin(rad);
+      const ly = dx * Math.sin(rad) + dy * Math.cos(rad);
+
+      const lengthChange = h.includes("e") ? lx : -lx;
+      const widthChange = h.includes("s") ? ly : -ly;
 
       o.length = Math.max(30, org.length + lengthChange);
-      o.width = Math.max(20, (org.width || 70) + widthChange * 1.5);
-    } else if (o.type === "arrow") {
-      const scaleFactor = (h.includes("e") ? dx : -dx) + (h.includes("s") ? dy : -dy);
-      o.length = Math.max(30, org.length + scaleFactor);
+      if (o.type === "direction") {
+        o.width = Math.max(20, (org.width || 70) + widthChange * 1.5);
+      }
     } else if (o.type === "player") {
       o.r = clamp(org.r + (h.includes("e") ? dx : -dx), 12, 500);
     } else if (o.type === "obstacle") {
