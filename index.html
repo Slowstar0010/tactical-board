@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#111827">
+  <title>Airsoft Tactical Board v2</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand"><strong>TACTICAL BOARD</strong><span>Airsoft briefing tool v2</span></div>
+  <div class="actions">
+    <button id="undoBtn">↶</button><button id="redoBtn">↷</button>
+    <button id="saveBtn">저장</button><button id="clearBtn" class="danger">전체 삭제</button>
+  </div>
+</header>
+
+<main class="app">
+  <aside class="toolbar">
+    <section>
+      <h2>도구</h2>
+      <button class="tool active" data-tool="select">↖ 선택 / 이동 / 크기</button>
+      <button class="tool" data-tool="player">● 플레이어</button>
+      <button class="tool" data-tool="direction">◉ 사격 방향</button>
+      <button class="tool" data-tool="arrow">➜ 이동 동선</button>
+      <button class="tool" data-tool="text">T 텍스트</button>
+      <button class="tool" data-tool="obstacle">▭ 장애물</button>
+    </section>
+    <section>
+      <h2>플레이어 색상</h2>
+      <div class="color-row">
+        <button class="color selected" data-color="#2563eb" style="--c:#2563eb"></button>
+        <button class="color" data-color="#dc2626" style="--c:#dc2626"></button>
+        <button class="color" data-color="#16a34a" style="--c:#16a34a"></button>
+        <button class="color" data-color="#f59e0b" style="--c:#f59e0b"></button>
+        <button class="color" data-color="#9333ea" style="--c:#9333ea"></button>
+        <button class="color" data-color="#111827" style="--c:#111827"></button>
+        <input id="customColor" type="color" value="#06b6d4">
+      </div>
+    </section>
+    <section class="help">
+      <h2>사용법</h2>
+      <p><b>선택 도구</b>: 객체 클릭 → 조절 박스 표시</p>
+      <p>가운데 드래그 → 이동</p>
+      <p>모서리/핸들 드래그 → 크기 조절</p>
+      <p>사격 방향: 클릭 → 오버레이, 두번째 클릭 → 방향 확정</p>
+      <p>이동 동선: 클릭 → 오버레이, 두번째 클릭 → 방향 확정</p>
+      <p>더블클릭 → 이름 변경</p>
+    </section>
+  </aside>
+
+  <section class="board-wrap">
+    <div class="board-head">
+      <input id="scenarioName" value="작전 브리핑" aria-label="작전명">
+      <div class="zoom">
+        <button id="zoomOut">−</button><span id="zoomValue">100%</span>
+        <button id="zoomIn">+</button><button id="fitBtn">화면 맞춤</button>
+      </div>
+    </div>
+    <div id="boardViewport" class="board-viewport">
+      <div id="infiniteBoard">
+        <svg id="board" viewBox="0 0 1600 1000" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+              <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#d7dde5" stroke-width="1"/>
+            </pattern>
+            <marker id="arrowHead" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor"/>
+            </marker>
+          </defs>
+          <rect class="field" x="0" y="0" width="1600" height="1000"/>
+          <rect class="grid" x="0" y="0" width="1600" height="1000"/>
+          <g id="objects"></g>
+          <g id="previewLayer" pointer-events="none"></g>
+          <g id="selectionLayer" pointer-events="none"></g>
+        </svg>
+      </div>
+    </div>
+  </section>
+</main>
+
+<div id="textDialog" class="dialog hidden">
+  <div class="dialog-card">
+    <h3>텍스트 / 이름 수정</h3>
+    <div id="numberInputGroup" style="margin-bottom: 10px; display: none;">
+      <label style="font-size: 12px; color: var(--muted); display: block; margin-bottom: 4px;">플레이어 번호</label>
+      <input id="numberInput" placeholder="예: 1, 2, A">
+    </div>
+    <div>
+      <label style="font-size: 12px; color: var(--muted); display: block; margin-bottom: 4px;">이름 / 라벨</label>
+      <input id="textInput" placeholder="예: 돌입조 / 엄폐 / 집결지">
+    </div>
+    <div class="dialog-actions">
+      <button id="textCancel">취소</button>
+      <button id="textOk" class="primary">확인</button>
+    </div>
+  </div>
+</div>
+<div id="toast" class="toast"></div>
+<script src="app.js"></script>
+</body>
+</html>
