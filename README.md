@@ -27,14 +27,3 @@
 - 위쪽 회전 핸들을 드래그하면 회전
 - Delete/Backspace로 삭제
 
-## Vercel
-정적 사이트입니다. GitHub에 파일을 올리고 Vercel에서 Import하면 됩니다.
-Build Command: 비워둠
-Output Directory: 기본값
-Framework Preset: Other
-
-파일:
-- index.html
-- style.css
-- app.js
-- README.md
