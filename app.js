@@ -16,7 +16,7 @@ let panStart = { x: 0, y: 0 };
 let spacePressed = false;
 let gridBgRect = null;
 
-// 웹 브라우저 전체 우클릭 메뉴(콘텍스트 메뉴) 차단
+// 웹 브라우저 우클릭 메뉴 차단
 document.addEventListener("contextmenu", e => e.preventDefault());
 
 // 무한 격자 패턴 초기화
@@ -92,7 +92,6 @@ function svgEl(tag, attrs = {}) {
 
 function snapshot() { return JSON.stringify(state); }
 
-// 💾 히스토리 저장 및 로컬스토리지 자동 저장
 function commit() {
   history = history.slice(0, historyIndex + 1);
   history.push(snapshot());
@@ -164,13 +163,17 @@ function addObject(type, x, y) {
   }
   if (type === "direction") Object.assign(o, { color: activeColor, angle: 0, length: 120, width: 70 });
   if (type === "arrow") Object.assign(o, { color: activeColor, length: 120, angle: 0, headSize: 40 });
-  if (type === "text") Object.assign(o, { text: "설명", size: 24, color: activeColor });
+  if (type === "text") Object.assign(o, { text: "설명", size: 28, color: activeColor, w: 100, h: 40 });
   if (type === "obstacle") Object.assign(o, { w: 160, h: 80 });
   
   state.objects.push(o);
   selectedIds = [o.id];
   render();
   commit();
+  
+  // 객체 생성 완료 후 자동으로 이동/선택(select) 모드로 전환
+  setTool("select");
+
   if (type === "text") openText(o);
   return o;
 }
@@ -242,10 +245,11 @@ function render() {
         x: o.x, 
         y: o.y, 
         class: "text-label", 
-        "font-size": o.size || 24, 
+        "font-size": o.size || 28, 
         "text-anchor": "middle",
         "dominant-baseline": "central",
         fill: o.color || "#1e293b",
+        "font-weight": "bold",
         textContent: o.text || "설명" 
       }));
     } else if (o.type === "obstacle") {
@@ -254,9 +258,10 @@ function render() {
     
     g.onpointerdown = objectDown;
     
-    // 💡 텍스트 및 객체 더블클릭 이벤트 연결
+    // 더블클릭 시 텍스트 수정 다이얼로그 호출
     g.ondblclick = (e) => {
       e.stopPropagation();
+      e.preventDefault();
       openText(o);
     };
 
@@ -271,15 +276,15 @@ function bounds(o) {
   if (o.type === "obstacle") return { x: o.x - o.w / 2, y: o.y - o.h / 2, w: o.w, h: o.h };
   
   if (o.type === "text") { 
+    const fontSize = o.size || 28;
     const str = o.text || "설명";
-    const fontSize = o.size || 24;
-    const approxWidth = Math.max(30, str.length * (fontSize * 0.7));
-    const approxHeight = fontSize * 1.2;
+    const calculatedWidth = Math.max(o.w || 40, str.length * (fontSize * 0.75));
+    const calculatedHeight = Math.max(o.h || 30, fontSize * 1.3);
     return { 
-      x: o.x - approxWidth / 2, 
-      y: o.y - approxHeight / 2, 
-      w: approxWidth, 
-      h: approxHeight 
+      x: o.x - calculatedWidth / 2, 
+      y: o.y - calculatedHeight / 2, 
+      w: calculatedWidth, 
+      h: calculatedHeight 
     }; 
   }
 
@@ -385,10 +390,14 @@ function objectAt(p) {
 function objectDown(e) {
   if (e.button === 2 || spacePressed) return;
   e.stopPropagation();
-  if (tool !== "select") return;
   
   const o = state.objects.find(x => x.id === Number(e.currentTarget.dataset.id));
   if (!o) return;
+
+  // 기존 객체를 터치/클릭했으면 무조건 선택 툴 모드로 전환
+  if (tool !== "select") {
+    setTool("select");
+  }
 
   if (!selectedIds.includes(o.id)) {
     selectedIds = [o.id];
@@ -460,10 +469,15 @@ function updateInteraction(p) {
       if (h.includes("n")) { hv = Math.max(30, org.h - dy); ny = org.y + (org.h - hv) / 2; }
       Object.assign(o, { w, h: hv, x: nx, y: ny });
     } else if (o.type === "text") {
-      // 💡 텍스트 사이즈 실시간 조절 개선
-      const delta = (h.includes("e") ? dx : -dx) + (h.includes("s") ? dy : -dy);
-      const initialSize = org.size || 24;
-      o.size = clamp(initialSize + delta * 0.4, 12, 300);
+      // 💡 텍스트 상자 크기 조절 시 실시간 폰트 크기(size) 연동 로직 개선
+      const factor = (h.includes("e") ? dx : -dx) + (h.includes("s") ? dy : -dy);
+      const initialSize = org.size || 28;
+      const newSize = clamp(initialSize + factor * 0.35, 12, 250);
+      
+      o.size = newSize;
+      const str = o.text || "설명";
+      o.w = Math.max(40, str.length * (newSize * 0.75));
+      o.h = Math.max(30, newSize * 1.3);
     }
   }
   render();
@@ -519,6 +533,21 @@ board.addEventListener("pointerdown", e => {
   
   const p = pt(e);
 
+  // 이미 존재하는 객체를 클릭했는지 확인
+  const targetObj = objectAt(p);
+  if (targetObj) {
+    // 툴이 활성화되어 있어도 기존 객체를 누르면 툴 생성을 방지하고 선택 툴로 변경
+    setTool("select");
+    selectedIds = [targetObj.id];
+    render();
+
+    const originals = state.objects
+      .filter(obj => selectedIds.includes(obj.id))
+      .map(obj => ({ id: obj.id, x: obj.x, y: obj.y }));
+    interaction = { mode: "move", start: p, originals, changed: false };
+    return;
+  }
+
   if (interaction?.mode === "place") {
     const start = interaction.anchor;
     const end = p;
@@ -540,21 +569,9 @@ board.addEventListener("pointerdown", e => {
   }
 
   if (tool === "select") {
-    const o = objectAt(p);
-    if (o) {
-      if (!selectedIds.includes(o.id)) {
-        selectedIds = [o.id];
-        render();
-      }
-      const originals = state.objects
-        .filter(obj => selectedIds.includes(obj.id))
-        .map(obj => ({ id: obj.id, x: obj.x, y: obj.y }));
-      interaction = { mode: "move", start: p, originals, changed: false };
-    } else {
-      selectedIds = [];
-      render();
-      interaction = { mode: "boxSelect", start: p, current: p };
-    }
+    selectedIds = [];
+    render();
+    interaction = { mode: "boxSelect", start: p, current: p };
     return;
   }
 
@@ -690,6 +707,8 @@ function openText(o) {
         o.label = i.value;
       } else if (o.type === "text") {
         o.text = i.value || "설명";
+        const fontSize = o.size || 28;
+        o.w = Math.max(40, o.text.length * (fontSize * 0.75));
       } else {
         o.label = i.value;
       }
