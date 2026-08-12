@@ -16,6 +16,9 @@ let panStart = { x: 0, y: 0 };
 let spacePressed = false;
 let gridBgRect = null;
 
+// 웹 브라우저 전체 우클릭 메뉴(콘텍스트 메뉴) 차단
+document.addEventListener("contextmenu", e => e.preventDefault());
+
 // 무한 격자 패턴 초기화
 function initGridPattern() {
   let defs = board.querySelector("defs");
@@ -88,11 +91,20 @@ function svgEl(tag, attrs = {}) {
 }
 
 function snapshot() { return JSON.stringify(state); }
+
+// 💾 변경사항 발생 시 히스토리 기록 + 로컬스토리지 자동 저장
 function commit() {
   history = history.slice(0, historyIndex + 1);
   history.push(snapshot());
   historyIndex++;
   if (history.length > 80) { history.shift(); historyIndex--; }
+
+  // 로컬스토리지 자동 저장 (Auto-Save)
+  try {
+    localStorage.setItem("airsoft-tactical-board-v2", snapshot());
+  } catch (e) {
+    console.error("로컬스토리지 자동 저장 실패:", e);
+  }
 }
 
 function getNextPlayerNumber() {
@@ -153,7 +165,7 @@ function addObject(type, x, y) {
   }
   if (type === "direction") Object.assign(o, { color: activeColor, angle: 0, length: 120, width: 70 });
   if (type === "arrow") Object.assign(o, { color: activeColor, length: 120, angle: 0, headSize: 40 });
-  if (type === "text") Object.assign(o, { text: "설명", size: 22 });
+  if (type === "text") Object.assign(o, { text: "설명", size: 24, color: activeColor });
   if (type === "obstacle") Object.assign(o, { w: 160, h: 80 });
   
   state.objects.push(o);
@@ -227,7 +239,16 @@ function render() {
       const e = arrowEnd(o);
       drawArrowShape(g, { x: o.x, y: o.y }, e, o.angle, o.color);
     } else if (o.type === "text") {
-      g.appendChild(svgEl("text", { x: o.x, y: o.y, class: "text-label", "font-size": o.size, textContent: o.text }));
+      g.appendChild(svgEl("text", { 
+        x: o.x, 
+        y: o.y, 
+        class: "text-label", 
+        "font-size": o.size, 
+        "text-anchor": "middle",
+        "dominant-baseline": "central",
+        fill: o.color || "#1e293b",
+        textContent: o.text 
+      }));
     } else if (o.type === "obstacle") {
       g.appendChild(svgEl("rect", { x: o.x - o.w / 2, y: o.y - o.h / 2, width: o.w, height: o.h, rx: 8, fill: "#d1d5db", stroke: "#4b5563", "stroke-width": 3 }));
     }
@@ -243,8 +264,23 @@ function render() {
 function bounds(o) {
   if (o.type === "player") return { x: o.x - o.r, y: o.y - o.r, w: o.r * 2, h: o.r * 2 };
   if (o.type === "obstacle") return { x: o.x - o.w / 2, y: o.y - o.h / 2, w: o.w, h: o.h };
-  if (o.type === "text") { const w = Math.max(50, (o.text || "").length * o.size * .58); return { x: o.x - w / 2, y: o.y - o.size / 2, w, h: o.size * 1.25 }; }
-  if (o.type === "arrow") { const e = arrowEnd(o); return { x: Math.min(o.x, e.x) - 20, y: Math.min(o.y, e.y) - 20, w: Math.abs(e.x - o.x) + 40, h: Math.abs(e.y - o.y) + 40 }; }
+  
+  if (o.type === "text") { 
+    const str = o.text || "설명";
+    const approxWidth = Math.max(30, str.length * (o.size * 0.7));
+    const approxHeight = o.size * 1.2;
+    return { 
+      x: o.x - approxWidth / 2, 
+      y: o.y - approxHeight / 2, 
+      w: approxWidth, 
+      h: approxHeight 
+    }; 
+  }
+
+  if (o.type === "arrow") { 
+    const e = arrowEnd(o); 
+    return { x: Math.min(o.x, e.x) - 20, y: Math.min(o.y, e.y) - 20, w: Math.abs(e.x - o.x) + 40, h: Math.abs(e.y - o.y) + 40 }; 
+  }
   if (o.type === "direction") {
     const r = o.angle * Math.PI / 180;
     const x2 = o.x + o.length * Math.cos(r), y2 = o.y + o.length * Math.sin(r);
@@ -397,7 +433,6 @@ function updateInteraction(p) {
     const dx = p.x - interaction.start.x, dy = p.y - interaction.start.y, h = interaction.handle;
 
     if (o.type === "direction" || o.type === "arrow") {
-      // 회전된 각도(angle)를 고려하여 글로벌 드래그(dx, dy)를 객체 기준 로컬 드래그(lx, ly)로 변환
       const rad = -(org.angle || 0) * Math.PI / 180;
       const lx = dx * Math.cos(rad) - dy * Math.sin(rad);
       const ly = dx * Math.sin(rad) + dy * Math.cos(rad);
@@ -419,7 +454,8 @@ function updateInteraction(p) {
       if (h.includes("n")) { hv = Math.max(30, org.h - dy); ny = org.y + (org.h - hv) / 2; }
       Object.assign(o, { w, h: hv, x: nx, y: ny });
     } else if (o.type === "text") {
-      o.size = Math.max(10, org.size + (dy * -0.3));
+      const delta = (h.includes("e") ? dx : -dx) + (h.includes("s") ? dy : -dy);
+      o.size = clamp(org.size + delta * 0.4, 12, 200);
     }
   }
   render();
@@ -460,13 +496,13 @@ function updateDragBox(p1, p2) {
   previewLayer.appendChild(rect);
 }
 
-board.addEventListener("contextmenu", e => e.preventDefault());
-
 board.addEventListener("pointerdown", e => {
   if (e.button === 2 || spacePressed) {
+    e.preventDefault();
     isPanning = true;
     panStart = { x: e.clientX, y: e.clientY };
     board.style.cursor = "grabbing";
+    board.setPointerCapture?.(e.pointerId);
     return;
   }
 
@@ -549,10 +585,11 @@ board.addEventListener("pointermove", e => {
   }
 });
 
-board.addEventListener("pointerup", () => {
+board.addEventListener("pointerup", e => {
   if (isPanning) {
     isPanning = false;
     board.style.cursor = "default";
+    board.releasePointerCapture?.(e.pointerId);
   }
 
   if (interaction?.mode === "boxSelect") {
@@ -672,31 +709,53 @@ const undoBtn = document.getElementById("undoBtn");
 if (undoBtn) undoBtn.onclick = undo;
 const redoBtn = document.getElementById("redoBtn");
 if (redoBtn) redoBtn.onclick = redo;
+
+// 🧹 전술판 초기화 시 로컬스토리지 데이터도 깔끔히 제거
 const clearBtn = document.getElementById("clearBtn");
 if (clearBtn) {
   clearBtn.onclick = () => {
     if (confirm("전술판의 모든 객체를 삭제할까요?")) {
-      state.objects = []; selectedIds = []; render(); commit(); toast("전술판을 초기화했습니다.");
+      state.objects = []; 
+      selectedIds = []; 
+      render(); 
+      localStorage.removeItem("airsoft-tactical-board-v2");
+      history = [snapshot()];
+      historyIndex = 0;
+      toast("전술판을 초기화했습니다.");
     }
   };
 }
+
 const scenarioNameEl = document.getElementById("scenarioName");
 if (scenarioNameEl) {
   scenarioNameEl.oninput = e => state.name = e.target.value;
   scenarioNameEl.onchange = commit;
 }
+
 const saveBtn = document.getElementById("saveBtn");
 if (saveBtn) {
   saveBtn.onclick = () => {
-    localStorage.setItem("airsoft-tactical-board-v2", snapshot());
-    toast("현재 전술판을 저장했습니다.");
+    try {
+      localStorage.setItem("airsoft-tactical-board-v2", snapshot());
+      toast("현재 전술판을 저장했습니다.");
+    } catch (e) {
+      toast("저장에 실패했습니다.");
+    }
   };
 }
 
+// 📂 저장된 진행사항 자동으로 로드
 function loadSaved() {
   const s = localStorage.getItem("airsoft-tactical-board-v2");
-  if (s) try { restore(s); } catch {}
-  history = []; historyIndex = -1; commit();
+  if (s) {
+    try { 
+      restore(s); 
+    } catch (e) {
+      console.error("저장된 데이터 복원 실패:", e);
+    }
+  }
+  history = [snapshot()];
+  historyIndex = 0;
 }
 
 const zoomInBtn = document.getElementById("zoomIn");
@@ -733,5 +792,4 @@ function toast(m) {
 // 초기화 실행
 initGridPattern();
 updateViewBox();
-render();
 loadSaved();
