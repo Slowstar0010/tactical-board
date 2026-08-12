@@ -163,7 +163,17 @@ function addObject(type, x, y) {
   }
   if (type === "direction") Object.assign(o, { color: activeColor, angle: 0, length: 120, width: 70 });
   if (type === "arrow") Object.assign(o, { color: activeColor, length: 120, angle: 0, headSize: 40 });
-  if (type === "text") Object.assign(o, { text: "설명", size: 28, color: activeColor, w: 100, h: 40 });
+  if (type === "text") {
+    const defaultText = "설명";
+    const defaultSize = 28;
+    Object.assign(o, { 
+      text: defaultText, 
+      size: defaultSize, 
+      color: activeColor, 
+      w: Math.max(60, defaultText.length * (defaultSize * 0.8)), 
+      h: defaultSize * 1.4 
+    });
+  }
   if (type === "obstacle") Object.assign(o, { w: 160, h: 80 });
   
   state.objects.push(o);
@@ -171,10 +181,12 @@ function addObject(type, x, y) {
   render();
   commit();
   
-  // 객체 생성 완료 후 자동으로 이동/선택(select) 모드로 전환
-  setTool("select");
-
-  if (type === "text") openText(o);
+  // 💡 텍스트 생성 시에만 수정 입력을 위해 'select'로 전환하고, 플레이어/장애물 등은 연속 배치가 가능하도록 기존 tool 유지
+  if (type === "text") {
+    setTool("select");
+    openText(o);
+  }
+  
   return o;
 }
 
@@ -258,7 +270,6 @@ function render() {
     
     g.onpointerdown = objectDown;
     
-    // 더블클릭 시 텍스트 수정 다이얼로그 호출
     g.ondblclick = (e) => {
       e.stopPropagation();
       e.preventDefault();
@@ -276,15 +287,13 @@ function bounds(o) {
   if (o.type === "obstacle") return { x: o.x - o.w / 2, y: o.y - o.h / 2, w: o.w, h: o.h };
   
   if (o.type === "text") { 
-    const fontSize = o.size || 28;
-    const str = o.text || "설명";
-    const calculatedWidth = Math.max(o.w || 40, str.length * (fontSize * 0.75));
-    const calculatedHeight = Math.max(o.h || 30, fontSize * 1.3);
+    const bw = o.w || 80;
+    const bh = o.h || 40;
     return { 
-      x: o.x - calculatedWidth / 2, 
-      y: o.y - calculatedHeight / 2, 
-      w: calculatedWidth, 
-      h: calculatedHeight 
+      x: o.x - bw / 2, 
+      y: o.y - bh / 2, 
+      w: bw, 
+      h: bh 
     }; 
   }
 
@@ -394,7 +403,6 @@ function objectDown(e) {
   const o = state.objects.find(x => x.id === Number(e.currentTarget.dataset.id));
   if (!o) return;
 
-  // 기존 객체를 터치/클릭했으면 무조건 선택 툴 모드로 전환
   if (tool !== "select") {
     setTool("select");
   }
@@ -469,15 +477,14 @@ function updateInteraction(p) {
       if (h.includes("n")) { hv = Math.max(30, org.h - dy); ny = org.y + (org.h - hv) / 2; }
       Object.assign(o, { w, h: hv, x: nx, y: ny });
     } else if (o.type === "text") {
-      // 💡 텍스트 상자 크기 조절 시 실시간 폰트 크기(size) 연동 로직 개선
-      const factor = (h.includes("e") ? dx : -dx) + (h.includes("s") ? dy : -dy);
-      const initialSize = org.size || 28;
-      const newSize = clamp(initialSize + factor * 0.35, 12, 250);
-      
+      let change = (h.includes("e") ? dx : -dx) + (h.includes("s") ? dy : -dy);
+      let scaleRatio = (org.w + change) / org.w;
+      if (scaleRatio < 0.3) scaleRatio = 0.3;
+
+      const newSize = clamp(org.size * scaleRatio, 12, 200);
       o.size = newSize;
-      const str = o.text || "설명";
-      o.w = Math.max(40, str.length * (newSize * 0.75));
-      o.h = Math.max(30, newSize * 1.3);
+      o.w = org.w * (newSize / org.size);
+      o.h = org.h * (newSize / org.size);
     }
   }
   render();
@@ -533,10 +540,8 @@ board.addEventListener("pointerdown", e => {
   
   const p = pt(e);
 
-  // 이미 존재하는 객체를 클릭했는지 확인
   const targetObj = objectAt(p);
   if (targetObj) {
-    // 툴이 활성화되어 있어도 기존 객체를 누르면 툴 생성을 방지하고 선택 툴로 변경
     setTool("select");
     selectedIds = [targetObj.id];
     render();
@@ -708,7 +713,8 @@ function openText(o) {
       } else if (o.type === "text") {
         o.text = i.value || "설명";
         const fontSize = o.size || 28;
-        o.w = Math.max(40, o.text.length * (fontSize * 0.75));
+        o.w = Math.max(60, o.text.length * (fontSize * 0.8));
+        o.h = fontSize * 1.4;
       } else {
         o.label = i.value;
       }
